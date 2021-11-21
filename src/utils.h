@@ -4,3 +4,7 @@
 #define error_print(format, ...) fprintf(stderr, "\x1b[31mERROR:" __FILE__ ":%d:(%s): " format "\x1b[m", __LINE__, __FUNCTION__, ##__VA_ARGS__)
 
 extern int debug_level;
+
+double freq_to_period (double, double);
+
+void phase_accu_update (double *, double);

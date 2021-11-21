@@ -9,6 +9,9 @@ struct jclient
   jack_nframes_t bufsize;
   double samplerate;
   int xrun;
+  double period;
+  double volume;
+  double phase_accu;
 };
 
 int jclient_run (struct jclient *);

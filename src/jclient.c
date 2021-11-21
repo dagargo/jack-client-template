@@ -9,6 +9,8 @@
 #include <jack/jack.h>
 #include "jclient.h"
 
+#define MIDI_NOTE_0_FREQ 8.1758
+
 static struct jclient jclient;
 
 static int
@@ -18,6 +20,24 @@ jclient_thread_xrun_cb (void *cb_data)
   error_print ("JACK xrun\n");
   jclient->xrun = 1;
   return 0;
+}
+
+void
+jclient_mini_note_off (struct jclient *jclient, jack_midi_event_t * jevent)
+{
+  debug_print (1, "Note %d off\n", jevent->buffer[1]);
+  jclient->volume = 0.0;
+}
+
+void
+jclient_mini_note_on (struct jclient *jclient, jack_midi_event_t * jevent)
+{
+  double freq;
+  freq = MIDI_NOTE_0_FREQ * pow (2, jevent->buffer[1] / 12.0);
+  jclient->period = freq_to_period (freq, jclient->samplerate);
+  jclient->volume = 1.0;
+  debug_print (1, "Note %d on (%f Hz, %f s)\n", jevent->buffer[1], freq,
+	       jclient->period);
 }
 
 static inline void
@@ -55,8 +75,17 @@ jclient_midi (struct jclient *jclient, jack_nframes_t nframes)
 	  switch (status_byte & 0xf0)
 	    {
 	    case 0x80:		//Note Off
+	      jclient_mini_note_off (jclient, &jevent);
 	      break;
 	    case 0x90:		//Note On
+	      if (jevent.buffer[2])
+		{
+		  jclient_mini_note_on (jclient, &jevent);
+		}
+	      else
+		{
+		  jclient_mini_note_off (jclient, &jevent);
+		}
 	      break;
 	    case 0xa0:		//Polyphonic Key Pressure
 	      break;
@@ -79,7 +108,8 @@ jclient_process_cb (jack_nframes_t nframes, void *arg)
 
   for (int i = 0; i < nframes; i++)
     {
-      buffer[i] = 0.0f;
+      buffer[i] = jclient->volume * sin (2 * M_PI * jclient->phase_accu);
+      phase_accu_update (&jclient->phase_accu, jclient->period);
     }
 
   jclient_midi (jclient, nframes);
@@ -169,6 +199,7 @@ jclient_run (struct jclient *jclient)
       goto cleanup_jack;
     }
 
+  jclient->phase_accu = .0;
   if (jack_activate (jclient->client))
     {
       error_print ("Cannot activate client\n");
